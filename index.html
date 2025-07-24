@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metro 订单详情展示</title>
+  <style>
+    /* 全局重置与布局 */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f2f5;
+      color: #333;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+
+    /* 标题 */
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: #0078D4;
+    }
+
+    /* 表单样式 */
+    #searchForm {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    #searchForm label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    #searchForm input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    /* 按钮父容器占满两列并居中 */
+    #searchForm .form-actions {
+      grid-column: 1 / -1;          /* 跨两列 */
+      display: flex;
+      justify-content: center;     /* 居中对齐 */
+      align-items: center;
+    }
+    #searchForm .form-actions button {
+      padding: 12px 24px;
+      background-color: #0078D4;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    #searchForm .form-actions button:hover {
+      background-color: #005A9E;
+    }
+
+    /* 订单卡片 */
+    .order-block {
+      background: #fff;
+      margin-top: 30px;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      animation: fadeIn 0.4s ease-in;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .section h3 {
+      margin-bottom: 10px;
+      color: #0078D4;
+    }
+    .section p, .section li {
+      margin-bottom: 6px;
+    }
+
+    /* 子订单 */
+    .child-order {
+      background: #f9fafb;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .status-history {
+      margin-top: 8px;
+      list-style: none;
+      padding-left: 0;
+    }
+    .status-history li::before {
+      content: "•";
+      color: #0078D4;
+      display: inline-block;
+      width: 1em;
+      margin-left: -1em;
+    }
+
+    /* 分页 */
+    #pagination {
+      text-align: center;
+      margin: 20px 0;
+    }
+    #pagination button {
+      margin: 0 6px;
+      padding: 8px 12px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    #pagination button:hover {
+      background: #e6f0fa;
+    }
+    #pagination span {
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Metro 订单查询</h1>
+    <form id="searchForm">
+      <div>
+        <label for="lastName">姓氏 (lastName)</label>
+        <input type="text" id="lastName" required placeholder="Lao" />
+      </div>
+      <div>
+        <label for="orderId">订单号 (orderId)</label>
+        <input type="text" id="orderId" required placeholder="71115165156,711855565015" />
+      </div>
+      <div>
+        <label for="zipCode">邮编 (zipCode)</label>
+        <input type="text" id="zipCode" required placeholder="12345" />
+      </div>
+      <div class="form-actions">
+        <button type="submit">查询订单</button>
+      </div>
+    </form>
+    <!-- 将分页控件放在列表上方 -->
+    <div id="pagination"></div>
+    <div id="output"></div>
+  </div>
+
+  <script>
+    (function(){
+      const proxyUrl   = 'https://cors-anywhere.herokuapp.com/';
+      const oauthUrl   = 'https://www.metrobyt-mobile.com/self-service-metro/v1/oauth';
+      const orderUrl   = 'https://www.metrobyt-mobile.com/self-service-metro/v1/orders/orderSearchById';
+      const jwkPayload = {
+        jwk: "{\"alg\":\"RS256\",\"e\":\"AQAB\",\"ext\":true,\"key_ops\":[\"verify\"],\"kty\":\"RSA\",\"n\":\"55L9WxaDEVBzelxbM0OBP2ZMEGrjwOIFat-ZhZHEsz7qLjmrIRHqWrA1nKoff7vEglUU9LAjEnmKtx6h1wGR3Mk8wP8xrX3j5t0PAJGh6iyTBJKIpmPLRxf6cEe0k0AHMOEYBlvOUmOvO8pC7MFofHPHtJGnFJD9N5ik9xJghj1y12RyFzLC9Hm0lF3bj9kGhQAPSoIwunKrgew-JQIQ81yjBVzsTA3y4kSdq6EDO7DIOy9d4cRd3V8NQCRDo42Dogqfca_K2Yz0CB-7yq1IpvyerRpkZtEdtA05wKo7Nwf5PA8hjHHBakqZOiV2gmxuGSoDdgbkqfuwt9ix1Xu8tw\",\"kid\":\"Dd9UQVuAMLvDTxwXX-MiGstH6UkukBDUUKceF90XQvc\"}"
+      };
+
+      let cachedToken   = localStorage.getItem('accessToken') || null;
+      let tokenExpires  = parseInt(localStorage.getItem('tokenExpires'),10) || 0;
+
+      function isTokenValid() {
+        return cachedToken && Date.now() < tokenExpires;
+      }
+
+      async function fetchNewToken() {
+        const res = await fetch(proxyUrl + oauthUrl, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(jwkPayload)
+        });
+        if(!res.ok) throw new Error(`OAuth 请求失败：${res.status}`);
+        const json = await res.json();
+        const token = json.accessToken;
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        tokenExpires = payload.exp * 1000;
+        cachedToken  = token;
+        localStorage.setItem('accessToken', token);
+        localStorage.setItem('tokenExpires', tokenExpires);
+        return token;
+      }
+
+      async function getAccessToken() {
+        return isTokenValid() ? cachedToken : await fetchNewToken();
+      }
+
+      async function searchOrder(token, payload) {
+        const res = await fetch(proxyUrl + orderUrl, {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/json',
+            'Authorization':'Bearer '+token
+          },
+          body:JSON.stringify(payload)
+        });
+        if(!res.ok) throw new Error(`订单查询失败：${res.status}`);
+        return res.json();
+      }
+
+      function renderOrder(order) {
+        const container = document.createElement('div');
+        container.className = 'order-block';
+        const addr = order.shippingAddress;
+        const addrLine = `${addr.addressLine1}, ${addr.cityName}, ${addr.stateCode} ${addr.zip}-${addr.zipExt || ''}`;
+        container.innerHTML += `<div class="section"><h3>收货地址</h3><p>${addrLine}</p></div>`;
+        if(order.shippingDetails?.length) {
+          const shipHtml = order.shippingDetails.map(d=>
+            `<p>${d.description} / 单号: ${d.trackingNumber}</p>`
+          ).join('');
+          container.innerHTML += `<div class="section"><h৩>物流信息</h৩>${shipHtml}</div>`;
+        }
+        if(order.childOrders?.length) {
+          const coHtml = order.childOrders.map(co => {
+            const hist = co.statusHistory.map(s=>
+              `<li>${s.changeDate} → ${s.status} / ${s.subStatus}</li>`
+            ).join('');
+            return `<div class="child-order">` +
+                   `<strong>${co.orderType} (${co.orderId})</strong>` +
+                   `<ul class="status-history">${hist}</ul>` +
+                   `</div>`;
+          }).join('');
+          container.innerHTML += `<div class="section"><h৩>子订单状态链</h৩>${coHtml}</div>`;
+        }
+        return container;
+      }
+
+      let allOrders = [], currentPage = 1, pageSize = 1;
+      function renderPage(page) {
+        const out = document.getElementById('output');
+        const paginationEl = document.getElementById('pagination');
+        out.innerHTML = '';
+        paginationEl.innerHTML = '';
+        const total = allOrders.length;
+        const totalPages = Math.ceil(total / pageSize);
+        currentPage = Math.min(Math.max(1, page), totalPages);
+        const start = (currentPage - 1) * pageSize;
+        const end   = start + pageSize;
+        allOrders.slice(start, end).forEach(o => out.appendChild(renderOrder(o)));
+        if (currentPage > 1) {
+          const prev = document.createElement('button'); prev.textContent = '« 上一页'; prev.onclick = ()=>renderPage(currentPage-1); paginationEl.appendChild(prev);
+        }
+        paginationEl.appendChild(document.createTextNode(` 第 ${currentPage} / ${totalPages}页 `));
+        if (currentPage < totalPages) {
+          const next = document.createElement('button'); next.textContent = ' 下一页 »'; next.onclick = ()=>renderPage(currentPage+1); paginationEl.appendChild(next);
+        }
+      }
+
+      document.getElementById('searchForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const lastName = document.getElementById('lastName').value.trim();
+        const orderId  = document.getElementById('orderId').value.split(',').map(s=>s.trim()).filter(s=>s);
+        const zipCode  = document.getElementById('zipCode').value.trim();
+        const payload  = { lastName, orderId, brand:'METRO', zipCode };
+        const out = document.getElementById('output'); out.innerHTML = '查询中…';
+        try {
+          const token = await getAccessToken();
+          const data  = await searchOrder(token, payload);
+          allOrders = data.orders || [];
+          if (!allOrders.length) out.innerHTML = '<p>未返回任何订单。</p>';
+          else renderPage(1);
+        } catch (err) {
+          out.innerHTML = `<p style="color:red">出错：${err.message}</p>`;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
